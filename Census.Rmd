@@ -1,0 +1,311 @@
+---
+title: "Adult Census Income"
+author: "Nadim Yatim"
+date: "2/25/2020"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Introduction
+Census income is known as the income that an individual receives before completing certain payments such as personal income taxes, social security, union dues and others. In some cases, as household surveys, some individuals tend to underreport their income. Our dataset is extracted from the 1994 Census bureau database by Ronny Kohavi and Barry Becker and includes adults that have reported their census income after also getting asked to provide their information regarding characteristics such as age, work class, marital status and many others. This project requires the prediction of whether an individual makes over $50K per year or not and different machine learning models are going to be considered to achieve these predictions. The obtained predictions are going to be assessed using the obtained accuracy and the F1 score.
+
+
+#Methods/Analysis
+
+##Data Exploration and Visualization
+
+###Data Exploration
+
+The dataset is made up of 32561 observations and has 15 features. Each row in this dataset is considered to have the income for each individual having a specific set of features.
+
+```{r Load Data, echo=FALSE}
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+data<- read_csv("https://raw.githubusercontent.com/nadimyatim/Choose-Your-Own-Project/master/adult.csv")
+```
+
+
+A sample of the data as well as a summary of each feature is as follows:
+
+```{r head,echo=FALSE}
+head(data) 
+```
+
+
+```{r Summary,echo=FALSE }
+summary(data) 
+```
+
+
+###Data Visualization
+Moreover, we now need to assess and visualize the effect of the features on income. The effect of numerical features are going to be visualized using boxplots while character features are visualized using bar plots. 
+
+####Effect of Working Hours per week
+It is clear that an increased income which is more than 50k is associated with having higher number of working hours per week
+```{r Impact of Hours per week on income,echo=FALSE }
+data %>% ggplot(aes(income,hours.per.week)) + geom_boxplot(fill="navy",col="red") 
+```
+
+####Effect of age
+As for age, we can see that as individuals get older they are more likely to earn more than 50k than to earn less than this amount  
+```{r Impact of age on income,echo=FALSE }
+data %>% ggplot(aes(income,age)) + geom_boxplot(fill="navy",col="red")
+```
+
+####Effect of education level
+Moreover, higher levels of education are more likely to result in earning higher levels of income and being in the category of earning more than 50k
+```{r Impact of education on income,echo=FALSE }
+data %>% ggplot(aes(income,education.num)) + geom_boxplot(fill="navy", col="red") 
+```
+
+####Effect of capital gain and capital loss
+
+Furthermore, capital gain and loss can affect the level of income and higher capital gain and  capital loss are associated with an income of more than 50k
+```{r Impact of capital gain and loss on income,echo=FALSE }
+data %>% ggplot(aes(income,capital.gain)) + geom_boxplot(fill="navy",col="red") 
+
+data %>% ggplot(aes(income,capital.loss)) + geom_boxplot(fill="navy",col="red") 
+```
+
+####Effect of fnlwgt
+Regarding the fnlwgt feature, we can notice, as seen in the boxplot below, that individuals earning more than or less than 50k per year are of the same weights approximately.
+
+```{r Impact of fnlwgt on income,echo=FALSE }
+data %>% ggplot(aes(income,capital.gain)) + geom_boxplot(fill="navy",col="red") 
+
+data %>% ggplot(aes(income,capital.loss)) + geom_boxplot(fill="navy",col="red") 
+```
+As for the features having the type character, their effect on income are shown in the following bar plots.
+
+####Effect of Workclass and Race
+As seen below, working for the private sector increases the chances of the individual for earning more than 50k. Moreover, individual from the white race are more than others that earn more than 50k 
+
+```{r Distribution of workclass and race based on income,echo=FALSE }
+data %>% ggplot(aes(workclass,fill=income)) + geom_bar(col="navy") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+data %>% ggplot(aes(race,fill=income)) + geom_bar(col="navy") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+
+####Effect of Sex and Marital Status
+According to our dataset, 50k and more incomes are earned more by males than females and being of the marital status “Married-civ-spouse” also appear to earn more than the other categories. 
+
+```{r Distribution of sex and marital status based on income,echo=FALSE }
+data %>% ggplot(aes(sex,fill=income)) + geom_bar(col="navy") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+data %>% ggplot(aes(marital.status,fill=income)) + geom_bar(col="navy") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+####Effect of Relationship and Occupation
+From our individuals in the dataset, Husbands more than any other relationship category, by a percentage of approximately 50% earn more than 50k. Whereas the number of individuals having an occupation of “Exec-managerial” and “Prof-specialty” are by far greater than those earning more than 50k in other categories.
+
+```{r Distribution of Relationship and Occupation based on income,echo=FALSE }
+data %>% ggplot(aes(relationship,fill=income)) + geom_bar(col="navy") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+data %>% ggplot(aes(occupation,fill=income)) + geom_bar(col="navy") + theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
+##Data Split: Training and Test Sets
+
+In order to mimic the evaluation process of machine learning algorithms we need to split our data into two parts which are the training set(for which we pretend to know the outcome) and the test set(for which we pretend not to know the outcome) . That’s why we decide on splitting the data into both sets having 90% of the data in the training set and 10% of the data in the test set. This is better than using a 50/50 split among training and test sets in our case because it will allow us to improve our predictions based on the metrics, such as accuracy, while evaluating the machine learning algorithms. The code for achieving this split is as follows:
+
+```{r Checking and Removing NAs, echo=FALSE}
+
+ #Checking if there are any NAs in our dataset
+ if_NA<- data %>% anyNA(data)
+ #Removing Nas from the dataset
+ data <- na.omit(data)
+
+```
+```{r Setting the seed to 1, echo=FALSE}
+ #Setting the seed to 1
+  set.seed(1)
+```
+
+
+```{r Splitting data into training and test sets}
+ #Creating data partitions and splitting the dataset
+  test_index <- createDataPartition(data$income, times = 1, p = 0.1, list = FALSE)
+  train_set <- data[-test_index,]
+  test_set <- data[test_index,]
+```
+
+###Modeling Approach
+
+####Metrics
+For the assessment of each model, we will use two metrics which are overall accuracy and the F1 score. Overall accuracy shows us how much the algorithm that is being tested is able to correctly predict a certain outcome (whether income is <=50K or >50K in our case) based on feature values that are taken as input. In addition, the F1 score is a measure that allows us to have a harmonic average of specificity and sensitivity and in our case a higher F1 score is preferred and can be an indicator about the performance of the machine learning model
+
+####Models
+#####Logistic Regression 
+Being an extension of the linear regression, the logistic regression model will be able in our case to have an estimate of the conditional probability to be between 0 and 1. It also allows for the usage of the logistic transformation which converts probabilities to log odds
+
+This transformation also allows for the probabilities to become symmetric around 0. In order to fit the logistic regression model, we have to use the maximum likelihood estimate. The model is fit as follows
+
+```{r Logistic Regression Model Train}
+#Training the model
+  train_glm <- train(income ~ ., 
+                         method = "glm", 
+                         data = train_set)
+```
+
+After fitting the model and completing the predictions, the obtained confusion matrix is shown below. The accuracy of the logistic regression model on the test set is 0.8480196 and the calculated F1 score is 0.9025015
+
+```{r Logistic Regression Model Results,echo=FALSE}
+#Caclulating the accuracy and constructing the confusion matrix
+  glm_preds <- predict(train_glm, test_set)
+  glm_accuracy<- mean(glm_preds == test_set$income)
+  confusionMatrix(factor(glm_preds), reference = factor(test_set$income))
+  #Calculating the F1 score
+  glm_F1<- F_meas(factor(glm_preds), factor(test_set$income))
+  #Creating the data frame Model_Results
+  Model_Results<- data_frame(Model="Logistic Regression",
+                             Accuracy=glm_accuracy, 
+                             F1score= glm_F1)
+  
+  #Displaying the model results
+  Model_Results %>% knitr::kable()
+```
+
+#####Linear Discriminate Analysis Model
+The quadratic discriminant analysis model is known to be an extension to the naïve Byes which assumes that the conditional probabilities are considered to be multivariate normal. This will allow the assumption of the conditional distributions to be bivariate normal. But due to the large number of predictors the QDA model is replaced by the LDA model which assumes the same correlation structure for all classes reducing the number of parameters that need to be estimated leading to the same standard deviation and correlations.
+
+Fitting the model is done as the code shown below
+```{r Linear Discriminate Analysis Model Train}
+#Training the model
+  train_lda <- train(income ~ ., 
+                     method = "lda", 
+                     data = train_set) 
+```
+
+After fitting the model and completing the predictions, the obtained confusion matrix is shown below. Also, as expected the accuracy, having a value of 0.8369665, is not considered to be high which is due to the lack of flexibility and the F1 score was calculated to be 0.8959028
+
+```{r Linear Discriminate Analysis Model Results,echo=FALSE}
+#Caclulating the accuracy and constructing the confusion matrix
+  lda_preds <- predict(train_lda, test_set)
+  lda_accuracy<- mean(lda_preds == test_set$income)
+  confusionMatrix(factor(lda_preds), reference = factor(test_set$income))
+  #Calculating the F1 score
+  lda_F1<- F_meas(factor(lda_preds), factor(test_set$income))
+  #Updating the data frame Model_Results
+  Model_Results<- bind_rows(Model_Results,
+                            data_frame(Model="Linear Discriminant Analysis",
+                                       Accuracy=lda_accuracy, 
+                                       F1score= lda_F1))
+  
+  
+  #Displaying the model results
+  Model_Results %>% knitr::kable()
+```
+
+#####Decision Tree Model
+The outcome in our case, which we are basing our prediction on, is the income. As seen previously, this feature is considered to be categorical. Thus, using classification(decision) trees are valid in this case. At the end of each node, the prediction is based on the class that has the majority vote. 
+
+This model, which could be used for modeling decision processes, is known for the ease at which it can be visualized and the high interpretability property that specializes it. 
+
+The code that is used in order to fit the decision tree model is shown below
+
+```{r Decision Tree Model Train}
+  #Training the model
+  train_rpart <- train(income ~ ., 
+                       method = "rpart", 
+                       data = train_set)
+```
+
+Upon constructing the confusion matrix, and as expected upon calculation, we obtain a low value of accuracy of 0.8308259 and a value of 0.8947067 for the F1 score. The low accuracy is explained by being not very flexible and the high instability to changes that are in the training set
+
+```{r Decision Tree Model Results,echo=FALSE}
+#Caclulating the accuracy and constructing the confusion matrix
+  rpart_preds <- predict(train_rpart, test_set)
+  rpart_accuracy<- mean(rpart_preds == test_set$income)
+  confusionMatrix(factor(rpart_preds), reference = factor(test_set$income))
+  #Calculating the F1 score
+  rpart_F1<- F_meas(factor(rpart_preds), factor(test_set$income))
+  #Updating the data frame Model_Results
+  Model_Results<- bind_rows(Model_Results,
+                            data_frame(Model="Decision Tree",
+                                       Accuracy=rpart_accuracy, 
+                                       F1score= rpart_F1))
+  
+  
+  #Displaying the model results
+  Model_Results %>% knitr::kable()
+```
+
+#####Random Forest Model
+As seen in the previous model, the classification(decision) tree, there are several flaws. Random forests can be used to address those shortcomings by reducing the instability and improving the obtained prediction performance. This is accomplished by averaging several decision trees, and thus obtaining a forest which is characterized by its randomness. We make sure that the trees that are obtained are unique and different from one another by using bootstrap to include the factor of randomness.
+
+The random forest model is fit as follows and as we can see we indicate the number of trees to be equal to 7.
+```{r Random Forest Model Train}
+  #Training the model
+  train_rforest <- train(income ~ ., 
+                       method = "rf",
+                       data = train_set, 
+                       ntree= 7,
+                       importance=TRUE)
+```
+
+As expected, and after the construction of the confusion matrix, we have an improvement of the accuracy to reach a value of 0.8470986 Also, the F1 score increases from the previous model and has a value of 0.9003203
+
+```{r Random Forest Model Results,echo=FALSE}
+#Caclulating the accuracy and constructing the confusion matrix
+  rforest_preds <- predict(train_rforest, test_set)
+  rforest_accuracy<- mean(rforest_preds == test_set$income)
+  confusionMatrix(factor(rforest_preds), reference = factor(test_set$income))
+  #Calculating the F1 score
+  rforest_F1<- F_meas(factor(rforest_preds), factor(test_set$income))
+  #Updating the data frame Model_Results
+  Model_Results<- bind_rows(Model_Results,
+                            data_frame(Model="Random Forest",
+                                       Accuracy=rforest_accuracy, 
+                                       F1score= rforest_F1))
+  
+
+  #Displaying the model results
+  Model_Results %>% knitr::kable()
+```
+
+#####Ensemble Model
+For further enhancements and improvements to the results obtained above by the predictions made from various machine learning methods, we can combine these results obtained. 
+
+
+The ensemble model, its accuracy, the confusion matrix and the corresponding F1 score are obtained as follows
+
+```{r Ensemble Model}
+  #Caclulating the accuracy and constructing the confusion matrix
+  ensemble <- cbind(glm = glm_preds=="<=50K" , lda = lda_preds=="<=50K", decision=rpart_preds=="<=50K", randomforest=rforest_preds=="<=50K")
+  
+  ensemble_preds <- ifelse(rowMeans(ensemble) > 0.5, "<=50K", ">50K")
+  ensemble_accuracy<-mean(ensemble_preds == test_set$income)
+  confusionMatrix(factor(ensemble_preds), reference = factor(test_set$income))
+  #Calculating the F1 score 
+  ensemble_F1<- F_meas(factor(ensemble_preds), factor(test_set$income))
+```
+
+As seen below, the accuracy obtained is 0.8520111 which is an improvement among all other models and the F1 score is 0.9045922.
+
+```{r Ensemble Results,echo=FALSE}
+#Updating the data frame Model_Results
+  Model_Results<- bind_rows(Model_Results,
+                            data_frame(Model="Ensemble",
+                                    Accuracy=ensemble_accuracy, 
+                                       F1score= ensemble_F1))
+  #Displaying the model results
+  Model_Results %>% knitr::kable()
+```
+
+#Results
+After trying 5 different models of machine learning, we obtained different values for both the accuracy F1 score that varied between 1 model and the other. Moreover, the highest value for accuracy and F1 score were obtained using the ensemble model having a value of 0.8520111 and 0.9045922 respectively. All the obtained results from accuracy and F1 score across the 5 models are found in the table shown below
+
+```{r Overall Model Results, echo=FALSE}
+  #Displaying the model results
+  Model_Results %>% knitr::kable()
+```
+
+#Conclusion
+In order to predict whether an individual has yearly income of over $50K per year, we took into consideration several machine learning models including Logistic Regression, Linear Discriminant Analysis, Decision Tree, Random Forest and finally an Ensemble of the previous models. The performance of each model was based on 2 metrics which are accuracy and the F1 score. The performance varied among the models and the Logistic Regression was achieving the highest accuracy and F1 score of 0.8480196 and 0.9025015 respectively. These were the highest among the other models until the Ensemble model was considered which increased both accuracy and the F1 score to reach 0.8520111 and 0.9045922 respectively. Additional machine learning algorithms could have been considered and might have resulted in increases in both accuracy and F1 score but limitations such as computer power and ability were an obstacle for running such algorithms and models in addition to considering only 7 trees in as a parameter in the random forest model.
